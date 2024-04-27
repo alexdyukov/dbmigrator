@@ -1,0 +1,89 @@
+x-templateappenv: &templateappenv
+  TEMPLATEAPP: >
+    package main
+
+    import (
+      "context"
+      "database/sql"
+      "embed"
+      "os"
+      "os/signal"
+      "syscall"
+      _ "REPLACEIMPORT"
+      "github.com/alexdyukov/dbmigrator"
+    )
+
+    //go:embed *.sql
+
+    var embeded embed.FS
+
+    func main() {
+      ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+      defer cancel()
+      db, err := sql.Open("REPLACEDRIVER", os.Getenv("CONNSTRING"))
+      if err != nil {
+        panic(err.Error())
+      }
+      if err = dbmigrator.Migrate(ctx, embeded, db, "migrations"); err != nil {
+        panic(err)
+      }
+    }
+x-common: &common
+  image: golang
+  volumes:
+    - ./:/fake:ro
+services:
+  postgres_test:
+    <<: *common
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+    environment:
+      <<: *templateappenv
+      CONNSTRING: postgres://postgres:postgres@postgres_db:5432/postgres?sslmode=disable
+    entrypoint: >
+      bash -c 'cp -r /fake/* /go/src/ && \
+               cd /go/src/ && \
+               printenv TEMPLATEAPP | sed -e "s|REPLACEDRIVER|pgx|g" -e "s|REPLACEIMPORT|github.com/jackc/pgx/v5/stdlib|g" > ./tests/pgx/main.go && \
+               go mod tidy && \
+               go run ./tests/pgx/main.go'
+  postgres_db:
+    image: postgres
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      POSTGRES_PASSWORD: postgres
+  mysql_test:
+    <<: *common
+    depends_on:
+      mysql_db:
+        condition: service_healthy
+    environment:
+      <<: *templateappenv
+      CONNSTRING: mysql:mysql@tcp(mysql_db:3306)/mysql
+      CGO_ENABLED: 1
+    entrypoint: >
+      bash -c 'cp -r /fake/* /go/src/ && \
+               cd /go/src/ && \
+               printenv TEMPLATEAPP | sed -e "s|REPLACEDRIVER|mysql|g" -e "s|REPLACEIMPORT|github.com/go-sql-driver/mysql|g" > ./tests/mysql/main.go && \
+               go mod tidy && \
+               go run ./tests/mysql/main.go'
+  mysql_db:
+    image: mysql
+    ports:
+      - '3306:3306'
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      MYSQL_RANDOM_ROOT_PASSWORD: 'yes'
+      MYSQL_USER: mysql
+      MYSQL_PASSWORD: mysql
+      MYSQL_DATABASE: mysql
