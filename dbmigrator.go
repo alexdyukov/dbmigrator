@@ -26,7 +26,7 @@ func (err invalidDirectoryStructureError) Error() string {
 func parseMigrations(fsys fs.FS) (map[string]string, []string, error) {
 	fileInfos, err := fs.ReadDir(fsys, ".")
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to list directory entries with error %w", err)
+		return nil, nil, fmt.Errorf("failed to list directory entries with error: %w", err)
 	}
 
 	migrations := make(map[string]string, len(fileInfos))
@@ -41,7 +41,7 @@ func parseMigrations(fsys fs.FS) (map[string]string, []string, error) {
 
 		body, err := fs.ReadFile(fsys, entryName)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to read file %s with error %w", entryName, err)
+			return nil, nil, fmt.Errorf("failed to read file %s with error: %w", entryName, err)
 		}
 
 		migrations[entryName] = string(body)
@@ -58,30 +58,28 @@ func initializeVersionScheme(ctx context.Context, pool DBPool, versionSchemeName
 	var transaction *sql.Tx
 
 	if transaction, err = pool.BeginTx(ctx, nil); err != nil {
-		err = fmt.Errorf("failed to initialize transaction with error %w", err)
+		err = fmt.Errorf("failed to begin transaction with error: %w", err)
 
 		return
 	}
 
 	defer func() {
 		if err == nil {
+			err = transaction.Commit()
+
 			return
 		}
 
 		if rollbackErr := transaction.Rollback(); rollbackErr != nil {
-			err = fmt.Errorf("failed to rollback base error: %w", err)
+			err = fmt.Errorf("failed to rollback for base error: %w", err)
 		}
 	}()
 
 	cmd := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (version VARCHAR(255) UNIQUE NOT NULL);", versionSchemeName)
 
 	if _, err = transaction.ExecContext(ctx, cmd); err != nil {
-		err = fmt.Errorf("failed to initialize version scheme with error %w", err)
-
-		return
+		err = fmt.Errorf("failed to initialize version scheme with error: %w", err)
 	}
-
-	err = transaction.Commit()
 
 	return
 }
@@ -93,18 +91,20 @@ func migrateOne(ctx context.Context, pool DBPool, versionSchemeName, version, mi
 	)
 
 	if transaction, err = pool.BeginTx(ctx, nil); err != nil {
-		err = fmt.Errorf("failed begin transaction with error: %w", err)
+		err = fmt.Errorf("failed to begin transaction with error: %w", err)
 
 		return err
 	}
 
 	defer func() {
 		if err == nil {
+			err = transaction.Commit()
+
 			return
 		}
 
 		if rollbackErr := transaction.Rollback(); rollbackErr != nil {
-			err = fmt.Errorf("failed to rollback base error: %w", err)
+			err = fmt.Errorf("failed to rollback for base error: %w", err)
 		}
 	}()
 
@@ -128,11 +128,7 @@ func migrateOne(ctx context.Context, pool DBPool, versionSchemeName, version, mi
 	cmd = fmt.Sprintf("INSERT INTO %s VALUES ('%s');", versionSchemeName, version)
 	if _, err = transaction.ExecContext(ctx, cmd); err != nil {
 		err = fmt.Errorf("failed to insert migration into version scheme with error: %w", err)
-
-		return
 	}
-
-	err = transaction.Commit()
 
 	return
 }
