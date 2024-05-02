@@ -1,8 +1,5 @@
 name: tests
-on:
-  push:
-    branches-ignore:
-    - master
+on: push
 jobs:
   test-postgres:
     runs-on: ubuntu-latest
