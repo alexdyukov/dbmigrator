@@ -14,6 +14,7 @@ type (
 	invalidDirectoryStructureError struct {
 		entryName string
 	}
+	// DBPool is the interface that describes minimal requirements of database connection.
 	DBPool interface {
 		BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
 	}
@@ -76,7 +77,6 @@ func initializeVersionScheme(ctx context.Context, pool DBPool, versionSchemeName
 	}()
 
 	cmd := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (version VARCHAR(255) UNIQUE NOT NULL);", versionSchemeName)
-
 	if _, err = transaction.ExecContext(ctx, cmd); err != nil {
 		err = fmt.Errorf("failed to initialize version scheme with error: %w", err)
 	}
@@ -133,6 +133,7 @@ func migrateOne(ctx context.Context, pool DBPool, versionSchemeName, version, mi
 	return
 }
 
+// Migrate parses migration from fs.FS and run them one by one in a lexical sort manner.
 func Migrate(ctx context.Context, fsys fs.FS, pool DBPool, versionSchemeName string) error {
 	migrations, upgradePlan, err := parseMigrations(fsys)
 	if err != nil {
