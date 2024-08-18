@@ -14,7 +14,7 @@ type (
 	invalidDirectoryStructureError struct {
 		entryName string
 	}
-	// DBPool is the interface that describes minimal requirements of database connection.
+	// DBPool describes minimal requirements of database connector.
 	DBPool interface {
 		BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
 	}
@@ -133,7 +133,8 @@ func migrateOne(ctx context.Context, pool DBPool, versionSchemeName, version, mi
 	return
 }
 
-// Migrate parses migration from fs.FS and run them one by one in a lexical sort manner.
+// Migrate run migrations from fs.FS with DBPool one by one in a lexical sort manner
+// committing them into versionSchemeName table if success.
 func Migrate(ctx context.Context, fsys fs.FS, pool DBPool, versionSchemeName string) error {
 	migrations, upgradePlan, err := parseMigrations(fsys)
 	if err != nil {
