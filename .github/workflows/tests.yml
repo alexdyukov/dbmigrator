@@ -7,15 +7,15 @@ jobs:
       - name: Checkout git repository
         uses: actions/checkout@v4
       - name: Run test for postgres backend
-        run: docker-compose up --build --exit-code-from postgres_test -- postgres_test postgres_db
+        run: docker compose up --build --exit-code-from postgres_test -- postgres_test postgres_db
       - name: Rerun test to be sure migration completes successfully on already migrated db
-        run: docker-compose up --build --exit-code-from postgres_test -- postgres_test postgres_db
+        run: docker compose up --build --exit-code-from postgres_test -- postgres_test postgres_db
   test-mysql:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout git repository
         uses: actions/checkout@v4
       - name: Run test for mysql backend
-        run: docker-compose up --build --exit-code-from mysql_test -- mysql_test mysql_db
+        run: docker compose up --build --exit-code-from mysql_test -- mysql_test mysql_db
       - name: Rerun test to be sure migration completes successfully on already migrated db
-        run: docker-compose up --build --exit-code-from mysql_test -- mysql_test mysql_db
+        run: docker compose up --build --exit-code-from mysql_test -- mysql_test mysql_db
