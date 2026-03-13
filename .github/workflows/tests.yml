@@ -1,21 +1,22 @@
 name: tests
-on: push
+
+on:
+  push:
+  schedule:
+    - cron: '0 0 * * 0'
+
 jobs:
-  test-postgres:
+  tests:
     runs-on: ubuntu-latest
     steps:
+      - name: Install golang
+        uses: actions/setup-go@v6
+        with:
+          go-version: 'stable'
+          check-latest: true
+
       - name: Checkout git repository
-        uses: actions/checkout@v4
-      - name: Run test for postgres backend
-        run: docker compose up --build --exit-code-from postgres_test -- postgres_test postgres_db
-      - name: Rerun test to be sure migration completes successfully on already migrated db
-        run: docker compose up --build --exit-code-from postgres_test -- postgres_test postgres_db
-  test-mysql:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout git repository
-        uses: actions/checkout@v4
-      - name: Run test for mysql backend
-        run: docker compose up --build --exit-code-from mysql_test -- mysql_test mysql_db
-      - name: Rerun test to be sure migration completes successfully on already migrated db
-        run: docker compose up --build --exit-code-from mysql_test -- mysql_test mysql_db
+        uses: actions/checkout@v6
+
+      - name: Run tests
+        run: cd tests && go test -v ./...

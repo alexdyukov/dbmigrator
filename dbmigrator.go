@@ -58,39 +58,8 @@ func parseMigrations(fsys fs.FS) (map[string]string, []string, error) {
 func initializeVersionScheme(ctx context.Context, pool DBPool, versionSchemeName string) (err error) {
 	var transaction *sql.Tx
 
-	if transaction, err = pool.BeginTx(ctx, nil); err != nil {
-		err = fmt.Errorf("failed to begin transaction with error: %w", err)
-
-		return
-	}
-
-	defer func() {
-		if err == nil {
-			err = transaction.Commit()
-
-			return
-		}
-
-		if rollbackErr := transaction.Rollback(); rollbackErr != nil {
-			err = fmt.Errorf("failed to rollback for base error: %w", err)
-		}
-	}()
-
-	cmd := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (version VARCHAR(255) UNIQUE NOT NULL);", versionSchemeName)
-	if _, err = transaction.ExecContext(ctx, cmd); err != nil {
-		err = fmt.Errorf("failed to initialize version scheme with error: %w", err)
-	}
-
-	return
-}
-
-func migrateOne(ctx context.Context, pool DBPool, versionSchemeName, version, migrationCommand string) (err error) {
-	var (
-		transaction *sql.Tx
-		cmd         string
-	)
-
-	if transaction, err = pool.BeginTx(ctx, nil); err != nil {
+	transaction, err = pool.BeginTx(ctx, nil)
+	if err != nil {
 		err = fmt.Errorf("failed to begin transaction with error: %w", err)
 
 		return err
@@ -103,34 +72,75 @@ func migrateOne(ctx context.Context, pool DBPool, versionSchemeName, version, mi
 			return
 		}
 
-		if rollbackErr := transaction.Rollback(); rollbackErr != nil {
+		rollbackErr := transaction.Rollback()
+		if rollbackErr != nil {
 			err = fmt.Errorf("failed to rollback for base error: %w", err)
 		}
 	}()
 
-	cmd = fmt.Sprintf("SELECT version FROM %s WHERE version='%s';", versionSchemeName, version)
-	if err = transaction.QueryRowContext(ctx, cmd).Scan(&cmd); err == nil {
-		// already migrated
-		return
-	} else if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	cmd := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (version VARCHAR(255) UNIQUE NOT NULL);", versionSchemeName)
+
+	_, err = transaction.ExecContext(ctx, cmd)
+	if err != nil {
+		err = fmt.Errorf("failed to initialize version scheme with error: %w", err)
+	}
+
+	return err
+}
+
+func migrateOne(ctx context.Context, pool DBPool, versionSchemeName, version, migrationCommand string) (err error) {
+	transaction, err := pool.BeginTx(ctx, nil)
+	if err != nil {
+		err = fmt.Errorf("failed to begin transaction with error: %w", err)
+
+		return err
+	}
+
+	defer func() {
+		if err == nil {
+			err = transaction.Commit()
+
+			return
+		}
+
+		rollbackErr := transaction.Rollback()
+		if rollbackErr != nil {
+			err = fmt.Errorf("failed to rollback for base error: %w", err)
+		}
+	}()
+
+	//nolint:gosec // placeholder parameters is database-specific. There is no way to unify it.
+	// Ensure you trust fs.FS content to prevent sql injections.
+	cmd := fmt.Sprintf("SELECT version FROM %s WHERE version='%s';", versionSchemeName, version)
+
+	err = transaction.QueryRowContext(ctx, cmd).Scan(&cmd)
+	if err == nil { // already migrated
+		return nil
+	}
+
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		err = fmt.Errorf("failed to get version from version scheme with error: %w", err)
 
-		return
+		return err
 	}
 
 	cmd = migrationCommand
-	if _, err = transaction.ExecContext(ctx, cmd); err != nil {
+
+	_, err = transaction.ExecContext(ctx, cmd)
+	if err != nil {
 		err = fmt.Errorf("failed to execute migration %s with error: %w", version, err)
 
-		return
+		return err
 	}
 
 	cmd = fmt.Sprintf("INSERT INTO %s VALUES ('%s');", versionSchemeName, version)
-	if _, err = transaction.ExecContext(ctx, cmd); err != nil {
+
+	_, err = transaction.ExecContext(ctx, cmd)
+	if err != nil {
 		err = fmt.Errorf("failed to insert migration into version scheme with error: %w", err)
 	}
 
-	return
+	return err
 }
 
 // Migrate run migrations from fs.FS with DBPool one by one in a lexical sort manner
@@ -141,14 +151,16 @@ func Migrate(ctx context.Context, fsys fs.FS, pool DBPool, versionSchemeName str
 		return fmt.Errorf("dbmigrator: %w", err)
 	}
 
-	if err = initializeVersionScheme(ctx, pool, versionSchemeName); err != nil {
+	err = initializeVersionScheme(ctx, pool, versionSchemeName)
+	if err != nil {
 		return fmt.Errorf("dbmigrator: %w", err)
 	}
 
 	for i := 0; i < len(upgradePlan); i++ {
 		version := upgradePlan[i]
 
-		if err := migrateOne(ctx, pool, versionSchemeName, version, migrations[version]); err != nil {
+		err := migrateOne(ctx, pool, versionSchemeName, version, migrations[version])
+		if err != nil {
 			return fmt.Errorf("dbmigrator: %w", err)
 		}
 	}
