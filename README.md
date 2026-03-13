@@ -12,19 +12,21 @@ This package provides method for database migration any stdlib's sql.DB compatib
 
   Semver/integer/timestamp typed versions requires different parse logics. Best run order was invented in unix's init.d : do lexical sort of files. Nothing good invented after that thing
 
-- Ensure you trust fs.FS content. Library executes it as is, without any validation
+* Ensure you trust fs.FS content. Library executes it as is, without any validation
 
   Library does not care of migration folder content. It does not know any DB engine specific functions/syntax
 
-- Do not use transaction in migrations
+* Do not use transaction in migrations
 
   Library executes migration inside transactions to commit success upgrade in version table. There is no way to embed transaction in transaction
 
-- There is no downgrade feature and never release it
+* There is no downgrade feature and never release it
 
-  Because once you upgraded it, no one can guarantee that other application instances wont downgrade it. That means you should do version check every transaction. I have never seen such braindead devs who wrote code like this
+  Because you cant:
+  1. rollback column drops
+  2. guarantee that other application instances wont downgrade current version. That means you should do version check on each transaction. Noone write code like this
 
-- Try to migrate safety
+* Try to migrate safety
 
   Do not break DB schemes by 1 migration. Use common way with at least 2 releases:
   1. release app version N+1 with new scheme without any breaking changes

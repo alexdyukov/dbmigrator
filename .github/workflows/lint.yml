@@ -1,18 +1,22 @@
 name: lint
+
 on:
   push:
     branches-ignore:
     - master
+
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
       - name: Install golang
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
         with:
-          go-version: 'oldstable'
+          go-version: 'stable'
           check-latest: true
+
       - name: Checkout git repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+
       - name: Run linters
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v7
